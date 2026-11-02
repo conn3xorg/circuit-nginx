@@ -1,5 +1,7 @@
 # circuit-nginx
 
+[![Conn3x grade](https://conn3x.org/circuits/nginx/grade.svg)](https://conn3x.org/circuits/nginx/grade)
+
 A [Conn3x](https://conn3x.org) circuit that installs nginx and serves one page from `/var/www/html`. It keeps the service running and enabled at boot, and reloads nginx when its configuration changes. It also opens the port in the host's firewall, with firewalld or ufw.
 
 ## Usage
