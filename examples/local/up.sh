@@ -15,7 +15,7 @@ podman rm -f "$name" >/dev/null 2>&1 || true
 # PAM needs DAC_OVERRIDE and AUDIT_WRITE, which some Podman versions drop.
 # NET_ADMIN and NET_RAW let firewalld run, for firewall = "firewalld".
 podman run -d --name "$name" --systemd=always --cap-add DAC_OVERRIDE,AUDIT_WRITE,NET_ADMIN,NET_RAW \
-  -p "127.0.0.1:$port:22" "$name" >/dev/null
+  -p "127.0.0.1:$port:22" -p "127.0.0.1:${WEB_PORT:-8080}:80" "$name" >/dev/null
 podman exec -i "$name" sh -c 'cat > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' < id_ed25519.pub
 podman exec "$name" timeout 60 systemctl is-system-running --wait >/dev/null 2>&1 || true
 
