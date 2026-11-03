@@ -57,7 +57,7 @@ On every host in `hosts`, in this order:
 
 | `firewall` | What happens |
 | --- | --- |
-| `"auto"` (default) | If firewalld is running, the port is opened in its default zone. If not, and ufw is installed, a ufw rule allows the port. If another circuit, such as circuit-firewall, is still installing ufw, it waits up to five minutes for that to finish. On a host with neither, nothing changes. |
+| `"auto"` (default) | If firewalld is running, the port is opened in its default zone. If not, and ufw is installed, a ufw rule allows the port. If another circuit, such as circuit-firewall, is still installing ufw, or has installed firewalld and not started it yet, it waits up to five minutes for that to finish. A firewalld that was stopped on purpose isn't waited for. On a host with neither, nothing changes. |
 | `"firewalld"` | Installs firewalld, starts and enables it, and opens the port. firewalld's default zone allows SSH. |
 | `"ufw"` | Installs ufw and adds a rule that allows the port. Conn3x doesn't enable ufw; the rule takes effect once you do. |
 | `"none"` | Leaves the firewall alone. |
