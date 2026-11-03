@@ -12,8 +12,10 @@ locals {
   # won't start by waiting, so a plan doesn't wait for either.
   # dn[f] keeps pgrep -f from matching this script's own command line.
   fwd_wait = "i=0; while pgrep -f 'dn[f].* install .*firewalld' >/dev/null || { systemctl -q is-enabled firewalld 2>/dev/null && ! systemctl -q is-active firewalld && [ \"$(systemctl show -P ActiveEnterTimestampMonotonic firewalld)\" = 0 ] && [ \"$(systemctl show -P ActiveState firewalld)\" != failed ]; }; do [ $i -ge 300 ] && break; i=$((i + 1)); sleep 1; done"
-  fw_open  = "${local.fwd_wait}; if firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=${var.port}/tcp && firewall-cmd -q --permanent --add-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ${local.ufw_wait}; ufw allow ${var.port}/tcp; fi"
-  fw_check = "${local.fwd_wait}; if firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --query-port=${var.port}/tcp && firewall-cmd -q --permanent --query-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ufw show added | grep -qx 'ufw allow ${var.port}/tcp'; fi"
+  # systemctl answers straight away. firewall-cmd --state on a stopped
+  # firewalld waits about ten seconds for D-Bus first, on every plan.
+  fw_open  = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=${var.port}/tcp && firewall-cmd -q --permanent --add-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ${local.ufw_wait}; ufw allow ${var.port}/tcp; fi"
+  fw_check = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --query-port=${var.port}/tcp && firewall-cmd -q --permanent --query-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ufw show added | grep -qx 'ufw allow ${var.port}/tcp'; fi"
 }
 
 circuit "nginx" {
