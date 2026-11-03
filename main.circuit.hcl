@@ -1,7 +1,11 @@
 locals {
   root = "/var/www/html"
 
-  fw_open  = "if firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=${var.port}/tcp && firewall-cmd -q --permanent --add-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ufw allow ${var.port}/tcp; fi"
+  # Another circuit may be installing ufw right now. Mid-install the binary
+  # is already there but ufw.conf, a conffile, isn't, and ufw fails without
+  # it, so wait up to five minutes for the install to finish.
+  ufw_wait = "i=0; while [ ! -e /etc/ufw/ufw.conf ] || dpkg-query -W -f='$${db:Status-Status}' ufw 2>/dev/null | grep -qE '^(unpacked|half-installed|half-configured|triggers-awaited|triggers-pending)$'; do [ $i -ge 300 ] && break; i=$((i + 1)); sleep 1; done"
+  fw_open  = "if firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=${var.port}/tcp && firewall-cmd -q --permanent --add-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ${local.ufw_wait}; ufw allow ${var.port}/tcp; fi"
   fw_check = "if firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --query-port=${var.port}/tcp && firewall-cmd -q --permanent --query-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ufw show added | grep -qx 'ufw allow ${var.port}/tcp'; fi"
 }
 
