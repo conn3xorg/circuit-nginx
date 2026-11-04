@@ -14,6 +14,16 @@ locals {
   fwd_wait = "i=0; while pgrep -f 'dn[f].* install .*firewalld' >/dev/null || { systemctl -q is-enabled firewalld 2>/dev/null && ! systemctl -q is-active firewalld && [ \"$(systemctl show -P ActiveEnterTimestampMonotonic firewalld)\" = 0 ] && [ \"$(systemctl show -P ActiveState firewalld)\" != failed ]; }; do [ $i -ge 300 ] && break; i=$((i + 1)); sleep 1; done"
   # systemctl answers straight away. firewall-cmd --state on a stopped
   # firewalld waits about ten seconds for D-Bus first, on every plan.
+  site_test = join("; ", [
+    "m=$(mktemp /etc/nginx/.conn3x-test.XXXXXX)",
+    "inc=$(mktemp)",
+    "trap 'rm -f \"$m\" \"$inc\"' EXIT",
+    "for f in /etc/nginx/conf.d/*.conf; do if [ -e \"$f\" ] && [ \"$f\" != /etc/nginx/conf.d/circuit-nginx.conf ]; then echo \"include $f;\"; fi; done > \"$inc\"",
+    "echo \"include %s;\" >> \"$inc\"",
+    "sed -e '\\#^[[:space:]]*include /etc/nginx/conf.d/\\*\\.conf;#{' -e \"r $inc\" -e 'd' -e '}' /etc/nginx/nginx.conf > \"$m\"",
+    "grep -qF \"include %s;\" \"$m\" || { echo 'nginx.conf has no include /etc/nginx/conf.d/*.conf; line to test the site in.' >&2; exit 1; }",
+    "nginx -t -q -c \"$m\"",
+  ])
   fw_open  = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=${var.port}/tcp && firewall-cmd -q --permanent --add-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ${local.ufw_wait}; ufw allow ${var.port}/tcp; fi"
   fw_check = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --query-port=${var.port}/tcp && firewall-cmd -q --permanent --query-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ufw show added | grep -qx 'ufw allow ${var.port}/tcp'; fi"
 }
@@ -58,10 +68,16 @@ circuit "nginx" {
     }
   }
 
+  # nginx -t on the candidate before it replaces the site file. nginx.conf
+  # includes conf.d/*.conf, which would pull in the old site file next to the
+  # candidate, so the test reads a throwaway copy of nginx.conf with that line
+  # swapped for every other file in conf.d plus the candidate, %s. It sits
+  # next to nginx.conf so any relative include resolves the same way.
   step "site" {
     file {
-      path    = "/etc/nginx/conf.d/circuit-nginx.conf"
-      content = <<-EOT
+      path     = "/etc/nginx/conf.d/circuit-nginx.conf"
+      validate = local.site_test
+      content  = <<-EOT
         # Managed by circuit-nginx. Changes made here are put back on the next apply.
         server {
             listen ${var.port} default_server;

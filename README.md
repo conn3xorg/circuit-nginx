@@ -48,7 +48,7 @@ On every host in `hosts`, in this order:
 1. Installs the `nginx` package with dnf or apt.
 2. On Debian and Ubuntu, removes the packaged default site from `/etc/nginx/sites-enabled`, since it also claims port 80.
 3. Writes `index_html` to `/var/www/html/index.html`.
-4. Writes `/etc/nginx/conf.d/circuit-nginx.conf`, a default server on `port` that serves `/var/www/html`.
+4. Writes `/etc/nginx/conf.d/circuit-nginx.conf`, a default server on `port` that serves `/var/www/html`, testing it with `nginx -t` alongside the rest of the config before it replaces the old one. A site nginx rejects, such as one that clashes with another `default_server` on the same port, never replaces the old one: the apply fails, and a restart or a reboot still reads the last good config.
 5. Starts nginx and enables it at boot.
 6. Opens `port` in the firewall, as `firewall` says.
 7. Reloads nginx if step 2 or 4 changed anything.
@@ -86,7 +86,7 @@ None.
 
 ## Requirements
 
-- Conn3x v0.6.4 or later.
+- Conn3x v0.7.0 or later.
 - Hosts running Rocky Linux, RHEL, AlmaLinux, Fedora, Debian or Ubuntu, with systemd.
 
 ## Tested on
