@@ -8,7 +8,7 @@ A [Conn3x](https://conn3x.org) circuit that installs nginx and serves one page f
 
 ```hcl
 module "web" {
-  source = "github.com/conn3xorg/circuit-nginx?ref=v0.2.1"
+  source = "github.com/conn3xorg/circuit-nginx?ref=v0.3.0"
 
   hosts = {
     web1 = "203.0.113.10"
@@ -28,7 +28,7 @@ A value in `hosts` can also be a host object, as in a circuit's own [`hosts`](ht
 
 ```hcl
 module "web" {
-  source = "github.com/conn3xorg/circuit-nginx?ref=v0.2.1"
+  source = "github.com/conn3xorg/circuit-nginx?ref=v0.3.0"
 
   hosts = {
     for name, d in digitalocean_droplet.web : name => {
