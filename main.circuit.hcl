@@ -24,8 +24,19 @@ locals {
     "grep -qF \"include %s;\" \"$m\" || { echo 'nginx.conf has no include /etc/nginx/conf.d/*.conf; line to test the site in.' >&2; exit 1; }",
     "nginx -t -q -c \"$m\"",
   ])
-  fw_open  = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=${var.port}/tcp && firewall-cmd -q --permanent --add-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ${local.ufw_wait}; ufw allow ${var.port}/tcp; fi"
-  fw_check = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --query-port=${var.port}/tcp && firewall-cmd -q --permanent --query-port=${var.port}/tcp; elif command -v ufw >/dev/null 2>&1; then ufw show added | grep -qx 'ufw allow ${var.port}/tcp'; fi"
+  # @PORT@ is the port each firewall_auto item opens.
+  fw_open  = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --add-port=@PORT@/tcp && firewall-cmd -q --permanent --add-port=@PORT@/tcp; elif command -v ufw >/dev/null 2>&1; then ${local.ufw_wait}; ufw allow @PORT@/tcp; fi"
+  fw_check = "${local.fwd_wait}; if systemctl -q is-active firewalld && firewall-cmd --state >/dev/null 2>&1; then firewall-cmd -q --query-port=@PORT@/tcp && firewall-cmd -q --permanent --query-port=@PORT@/tcp; elif command -v ufw >/dev/null 2>&1; then ufw show added | grep -qx 'ufw allow @PORT@/tcp'; fi"
+
+  # The ports to open. The keys stay "port" and "tls_port", so turning TLS
+  # on or off doesn't touch the plain port's firewall steps.
+  ports = merge({ port = var.port }, var.tls_self_signed ? { tls_port = var.tls_port } : {})
+
+  tls_key  = "/etc/nginx/circuit-nginx.key"
+  tls_cert = "/etc/nginx/circuit-nginx.crt"
+  # Addresses go in the certificate's ip_addresses, everything else in its
+  # dns_names.
+  tls_ips = [for n in var.tls_names : n if can(cidrhost("${n}/32", 0)) || can(cidrhost("${n}/128", 0))]
 }
 
 circuit "nginx" {
@@ -51,6 +62,36 @@ circuit "nginx" {
     command {
       command = "rm -f /etc/nginx/sites-enabled/default"
       removes = "/etc/nginx/sites-enabled/default"
+    }
+    notify = [handler.reload]
+  }
+
+  # A key and a self-signed certificate, made on the host, so the key never
+  # leaves it. The certificate is renewed 30 days before it expires, and
+  # nginx reloads to pick it up.
+  step "tls_openssl" {
+    when = var.tls_self_signed
+    package {
+      name = "openssl"
+    }
+  }
+
+  step "tls_key" {
+    when = var.tls_self_signed
+    tls_private_key {
+      path = local.tls_key
+    }
+  }
+
+  step "tls_cert" {
+    when = var.tls_self_signed
+    tls_self_signed_cert {
+      path         = local.tls_cert
+      key_path     = local.tls_key
+      common_name  = length(var.tls_names) > 0 ? var.tls_names[0] : each.key
+      dns_names    = length(var.tls_names) > 0 ? [for n in var.tls_names : n if !contains(local.tls_ips, n)] : [each.key]
+      ip_addresses = local.tls_ips
+      days         = var.tls_days
     }
     notify = [handler.reload]
   }
@@ -86,6 +127,17 @@ circuit "nginx" {
             root ${local.root};
             index index.html;
         }
+        %{if var.tls_self_signed~}
+        server {
+            listen ${var.tls_port} ssl default_server;
+            listen [::]:${var.tls_port} ssl default_server;
+            server_name _;
+            ssl_certificate ${local.tls_cert};
+            ssl_certificate_key ${local.tls_key};
+            root ${local.root};
+            index index.html;
+        }
+        %{endif~}
       EOT
     }
     notify = [handler.reload]
@@ -102,10 +154,10 @@ circuit "nginx" {
   # firewall = "auto": firewalld if it's running, otherwise ufw if it's
   # installed. On a host with neither, this does nothing.
   step "firewall_auto" {
-    for_each = var.firewall == "auto" ? { port = var.port } : {}
+    for_each = var.firewall == "auto" ? local.ports : {}
     command {
-      command = local.fw_open
-      unless  = local.fw_check
+      command = replace(local.fw_open, "@PORT@", tostring(item.value))
+      unless  = replace(local.fw_check, "@PORT@", tostring(item.value))
     }
   }
 
@@ -126,7 +178,7 @@ circuit "nginx" {
   }
 
   step "firewalld_port" {
-    for_each = var.firewall == "firewalld" ? { port = var.port } : {}
+    for_each = var.firewall == "firewalld" ? local.ports : {}
     firewalld {
       port = "${item.value}/tcp"
     }
@@ -140,7 +192,7 @@ circuit "nginx" {
   }
 
   step "ufw_port" {
-    for_each = var.firewall == "ufw" ? { port = var.port } : {}
+    for_each = var.firewall == "ufw" ? local.ports : {}
     ufw {
       action = "allow"
       port   = "${item.value}/tcp"

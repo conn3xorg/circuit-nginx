@@ -11,4 +11,5 @@ module "web" {
   ssh_private_key_file = "./id_ed25519"
   ssh_known_hosts_file = "./known_hosts"
   index_html           = "<!doctype html>\n<title>circuit-nginx</title>\n<p>Hello from circuit-nginx.</p>\n"
+  tls_self_signed      = true
 }

@@ -65,3 +65,42 @@ variable "firewall" {
     error_message = "firewall must be \"auto\", \"firewalld\", \"ufw\" or \"none\"."
   }
 }
+
+variable "tls_self_signed" {
+  type        = bool
+  default     = false
+  description = "Make a key and a self-signed certificate on each host, and serve the site over HTTPS on tls_port too. For labs and internal services without a CA."
+}
+
+variable "tls_port" {
+  type        = number
+  default     = 443
+  description = "The port nginx serves HTTPS on, with tls_self_signed, and the port the firewall opens for it."
+
+  validation {
+    condition     = var.tls_port >= 1 && var.tls_port <= 65535 && floor(var.tls_port) == var.tls_port
+    error_message = "tls_port must be a whole number from 1 to 65535."
+  }
+
+  validation {
+    condition     = !var.tls_self_signed || var.tls_port != var.port
+    error_message = "tls_port must differ from port."
+  }
+}
+
+variable "tls_names" {
+  type        = list(string)
+  default     = []
+  description = "Names and addresses the certificate is for. The first is its common name. When empty, it's for the host's name in hosts."
+}
+
+variable "tls_days" {
+  type        = number
+  default     = 365
+  description = "How long each certificate is valid, from 31 to 3650 days. It's renewed when 30 days are left."
+
+  validation {
+    condition     = var.tls_days >= 31 && var.tls_days <= 3650 && floor(var.tls_days) == var.tls_days
+    error_message = "tls_days must be a whole number from 31 to 3650."
+  }
+}
